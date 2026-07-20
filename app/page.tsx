@@ -1,47 +1,94 @@
-"use client"
-import { useState } from "react"
-export default function Page(){
- const [input,setInput]=useState("")
- const [output,setOutput]=useState("")
- const [loading,setLoading]=useState(false)
- const examples={
-  Contracts:"Non-compete 24 months within 100 miles, Delaware arbitration, auto-renewal 60 days notice required, penalty $5000.",
-  Privacy:"We collect and share location, browsing history with third parties. User waives opt-out rights.",
-  Leases:"Valet trash $35/mo, pet rent $200/mo, landlord may enter without notice, 12 month lease."
- }
- const analyze=async()=>{
-  if(!input.trim()) return
-  setLoading(true)
-  try{
-   const r=await fetch("/api/analyze",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({text:input})})
-   const d=await r.json()
-   setOutput(d.result)
-  }catch{setOutput("Demo: Connect Ollama in /api/analyze/route.ts")}
-  setLoading(false)
- }
- return(
-  <main style={{minHeight:"100vh",background:"#0B1026",color:"white",padding:"40px 24px"}}>
-   <div style={{maxWidth:"1100px",margin:"0 auto"}}>
-    <h1 style={{fontSize:"42px",fontWeight:900,textAlign:"center",letterSpacing:"4px"}}>CLAUSE SHIELD</h1>
-    <p style={{textAlign:"center",opacity:.7,marginTop:"8px"}}>Your Legal A.I. Solution</p>
-    <p style={{textAlign:"center",color:"#FF6B6B",marginTop:"36px",fontWeight:700,letterSpacing:"1px"}}>Common Document Types</p>
-    <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:"16px",marginTop:"16px",maxWidth:"700px",marginInline:"auto"}}>
-     {Object.entries(examples).map(([k,v])=>(
-      <button key={k} onClick={()=>setInput(v)} style={{background:"#151B36",border:"2px solid #2A3055",borderRadius:"16px",padding:"36px",fontWeight:900,color:"white",cursor:"pointer"}}>{k}</button>
-     ))}
-    </div>
-    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"24px",marginTop:"32px"}}>
-     <div style={{display:"flex",flexDirection:"column",gap:"16px"}}>
-      <textarea value={input} onChange={e=>setInput(e.target.value)} placeholder="Paste agreement here..." style={{width:"100%",height:"380px",background:"#7A9CC6",color:"black",padding:"24px",borderRadius:"20px",border:"none",fontSize:"18px"}}></textarea>
-      <button onClick={analyze} style={{width:"100%",background:"#FF4D4D",padding:"18px",borderRadius:"14px",fontWeight:900,fontSize:"18px",border:"none",cursor:"pointer"}}>{loading?"ANALYZING...":"Analyze Document"}</button>
-     </div>
-     <div style={{display:"flex",flexDirection:"column",gap:"16px"}}>
-      <div style={{width:"100%",height:"380px",background:"#7A9CC6",color:"#8B0000",padding:"24px",borderRadius:"20px",overflow:"auto",whiteSpace:"pre-wrap",fontWeight:700,fontSize:"18px"}}>{output||"your summary will apear here"}</div>
-      <button onClick={()=>navigator.clipboard.writeText(output)} style={{width:"100%",background:"#FF6B00",padding:"18px",borderRadius:"14px",fontWeight:900,fontSize:"18px",border:"none",cursor:"pointer"}}>Copy</button>
-     </div>
-    </div>
-    <p style={{textAlign:"center",fontSize:"12px",opacity:.4,marginTop:"48px"}}>For informational purposes only, not legal advice. Private, local AI processing.</p>
-   </div>
-  </main>
- )
+'use client'
+import { useState } from 'react'
+
+export default function Home() {
+  const [contract, setContract] = useState('')
+  const [result, setResult] = useState<any>(null)
+
+  const analyze = () => {
+    const text = contract.toLowerCase()
+    const traps = []
+
+    // 1. Non-compete
+    const ncMatch = contract.match(/(\d+)\s*months?.*non-compete|non-compete.*(\d+)\s*months?/i) || text.match(/(\d+)-month/)
+    const months = ncMatch? parseInt(ncMatch[1] || ncMatch[2] || '24') : 0
+    if (text.includes('non-compete') || text.includes('non compete')) {
+      const miles = contract.match(/(\d+)\s*miles?/i)
+      const distance = miles? miles[1] : 'United States'
+      traps.push({
+        title: `Non-compete ${months || 24} months / ${distance} is overbroad`,
+        severity: months >= 12? 'HIGH' : 'MEDIUM',
+        fix: 'Ask for 6-12 months, 25 miles or city-only, and Texas if you are in Texas.'
+      })
+    }
+
+    // 2. Arbitration / Venue
+    if (text.includes('arbitration')) {
+      const arbLoc = contract.match(/arbitration in ([A-Za-z,]+)[,.]/i)
+      const loc = arbLoc? arbLoc[1] : 'out-of-state'
+      traps.push({
+        title: `Forced arbitration in ${loc} = expensive to dispute`,
+        severity: 'MEDIUM',
+        fix: 'Ask for mediation first, venue in your home county, and split costs.'
+      })
+    }
+
+    // 3. Auto-renewal
+    if (text.includes('automatically renew') || text.includes('auto-renew')) {
+      const days = contract.match(/(\d+)\s*days.*notice/i)
+      const notice = days? days[1] : '90'
+      traps.push({
+        title: `Auto-renewal with ${notice}-day notice traps you`,
+        severity: 'MEDIUM',
+        fix: 'Ask for 30-day notice and email reminder before renewal.'
+      })
+    }
+
+    // 4. Indemnification
+    if (text.includes('indemnify') && text.includes('hold harmless')) {
+      traps.push({
+        title: 'One-sided unlimited indemnification',
+        severity: 'HIGH',
+        fix: 'Make it mutual and cap at amount paid under contract.'
+      })
+    }
+
+    // 5. Termination fee
+    if (text.includes('termination fee') && text.match(/100%/)) {
+      traps.push({
+        title: '100% termination fee = you pay full contract if you leave early',
+        severity: 'HIGH',
+        fix: 'Ask for no fee with 30-day notice, or pro-rated fee only.'
+      })
+    }
+
+    setResult({
+      plain: contract.slice(0, 250) + '... This means you are agreeing to ' + (traps.length? traps[0].title.toLowerCase() : 'risky terms') + '.',
+      traps,
+      recommendation: traps.length? 'Ask to amend: ' + traps.map(t=>t.fix).slice(0,2).join(' ') : 'Looks clean.'
+    })
+  }
+
+  return (
+    <main style={{maxWidth:800, margin:'40px auto', padding:20, fontFamily:'sans-serif', background:'#0f172a', color:'white', minHeight:'100vh'}}>
+      <h1>CLAUSE SHIELD</h1>
+      <p>Your Legal AI - Paste any contract below</p>
+      <textarea value={contract} onChange={e=>setContract(e.target.value)} placeholder="Paste contract here..." style={{width:'100%', height:200, padding:12}} />
+      <button onClick={analyze} style={{marginTop:12, padding:'10px 20px', background:'#f43f5e', color:'white', border:'none', cursor:'pointer'}}>Analyze for Traps</button>
+
+      {result && (
+        <div style={{marginTop:20, background:'white', color:'black', padding:20, borderRadius:8}}>
+          <h3>PLAIN ENGLISH:</h3><p>{result.plain}</p>
+          {result.traps.map((t:any,i:number)=>(
+            <div key={i} style={{borderLeft:'4px solid red', paddingLeft:10, margin:'10px 0'}}>
+              🚩 TRAP {i+1} [{t.severity}]: {t.title}<br/>
+              <small>FIX: {t.fix}</small>
+            </div>
+          ))}
+          <p><b>RECOMMENDATION:</b> {result.recommendation}</p>
+          <p><b>NEXT STEP:</b> Copy this and ask landlord/employer to amend.</p>
+        </div>
+      )}
+    </main>
+  )
 }
